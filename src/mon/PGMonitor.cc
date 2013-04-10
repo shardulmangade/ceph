@@ -581,11 +581,6 @@ void PGMonitor::check_osd_map(epoch_t epoch)
   if (mon->is_peon()) 
     return; // whatever.
 
-  if (pg_map.last_osdmap_epoch >= epoch) {
-    dout(10) << "check_osd_map already seen " << pg_map.last_osdmap_epoch << " >= " << epoch << dendl;
-    return;
-  }
-
   if (!mon->osdmon()->is_readable()) {
     dout(10) << "check_osd_map -- osdmap not readable, waiting" << dendl;
     mon->osdmon()->wait_for_readable(new RetryCheckOSDMap(this, epoch));
@@ -596,6 +591,11 @@ void PGMonitor::check_osd_map(epoch_t epoch)
     dout(10) << "check_osd_map -- pgmap not writeable, waiting" << dendl;
     wait_for_writeable(new RetryCheckOSDMap(this, epoch));
     return;
+  }
+
+  if (pg_map.last_osdmap_epoch >= epoch) {
+    dout(10) << "check_osd_map already seen " << pg_map.last_osdmap_epoch << " >= " << epoch << dendl;
+    goto check_and_finish;
   }
 
   // apply latest map(s)
@@ -647,6 +647,8 @@ void PGMonitor::check_osd_map(epoch_t epoch)
       }
     }
   }
+
+check_and_finish:
 
   bool propose = false;
   if (pg_map.last_osdmap_epoch < epoch) {
@@ -787,6 +789,9 @@ bool PGMonitor::register_new_pgs()
 
 void PGMonitor::send_pg_creates()
 {
+  if (mon->osdmon()->osdmap.get_epoch() == 0) {
+    dout(10) << "send_pg_creates has no OSDMap; not sending" << dendl;
+  }
   dout(10) << "send_pg_creates to " << pg_map.creating_pgs.size() << " pgs" << dendl;
 
   utime_t now = ceph_clock_now(g_ceph_context);
